@@ -2,7 +2,7 @@
 
 **Estudiante:** Quiquijana Calle Joshua Ivan · **Materia:** Metodos Numericos · **Desafío:** modelar un problema real con una EDO de primer orden (Heun, RK4 y solución analítica)
 
-**Aplicación web:** [pega aquí tu URL pública]
+**Aplicación web:** https://joshuaquiquijana.github.io/DESAFIO---ECUACIONES-DIFERENCIALES-/
 
 Caso hipotético. Los parámetros son supuestos declarados, no mediciones, y los resultados son simulaciones, no predicciones comprobadas.
 
