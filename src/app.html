@@ -1,0 +1,575 @@
+<title>Inti Q'uñi</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Simulador de un termotanque solar comunitario con EDO de primer orden: solución analítica, Heun y Runge-Kutta 4.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Concepto: panel de control de un internado altiplánico. Franjas de aguayo como único ornamento;
+   a la izquierda se ajusta el sistema, a la derecha se lee el resultado (tanque vivo, gráficas, tablas). */
+:root{
+  --bg:#F1F4EF; --surface:#FFFFFF; --surface2:#E7ECE4; --fg:#16202B; --muted:#56626F; --line:#C9D2C8;
+  --sol:#8A5E00; --sol-bg:#FFF1CC;
+  --exact:#16202B; --heun:#B5144F; --rk4:#00796B;
+  --good:#17714A; --good-bg:#DDF3E7; --bad:#AE2A1F; --bad-bg:#FBE2DE; --focus:#2B5BD7;
+  --b1:#C2185B; --b2:#F2A900; --b3:#00897B; --b4:#3949AB; --paper:#F7F9F5;
+  --f-display:'Bricolage Grotesque','Trebuchet MS',system-ui,sans-serif;
+  --f-body:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --f-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0F151C; --surface:#18212B; --surface2:#212C38; --fg:#E8EDF2; --muted:#9BA7B5; --line:#2F3B48;
+  --sol:#FFC94D; --sol-bg:#3A2D0A;
+  --exact:#E8EDF2; --heun:#FF7BAE; --rk4:#46D6C1;
+  --good:#52D190; --good-bg:#12362A; --bad:#FF9188; --bad-bg:#43201D; --focus:#8FB0FF; --paper:#141C25;
+  color-scheme:dark;}}
+:root[data-theme="dark"]{
+  --bg:#0F151C; --surface:#18212B; --surface2:#212C38; --fg:#E8EDF2; --muted:#9BA7B5; --line:#2F3B48;
+  --sol:#FFC94D; --sol-bg:#3A2D0A;
+  --exact:#E8EDF2; --heun:#FF7BAE; --rk4:#46D6C1;
+  --good:#52D190; --good-bg:#12362A; --bad:#FF9188; --bad-bg:#43201D; --focus:#8FB0FF; --paper:#141C25;
+  color-scheme:dark;}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.55}
+.wrap{max-width:1240px;margin:0 auto;padding-block:0 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3{font-family:var(--f-display);margin:0;text-wrap:balance;line-height:1.1}
+h2{font-size:1.35rem;font-weight:800;letter-spacing:-.01em}
+h3{font-size:1rem;font-weight:600;font-family:var(--f-body)}
+p{margin:0}
+.mono,code,.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+
+/* Franja aguayo */
+.aguayo{height:14px;background:
+  linear-gradient(90deg,var(--b1) 0 16%,var(--paper) 16% 17%,var(--b2) 17% 33%,var(--paper) 33% 34%,var(--b3) 34% 50%,var(--paper) 50% 51%,var(--b4) 51% 67%,var(--paper) 67% 68%,var(--b1) 68% 84%,var(--paper) 84% 85%,var(--b2) 85% 100%);
+  margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px)))}
+.hero{padding-block:28px 22px;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:28px;align-items:end}
+.kicker{font-family:var(--f-mono);font-size:.74rem;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+h1{font-size:clamp(2.6rem,7vw,4.6rem);font-weight:800;letter-spacing:-.03em;margin-block:8px 10px}
+h1 span{color:var(--sol)}
+.lead{font-size:1.05rem;max-width:60ch}
+.mission{border:1.5px solid var(--fg);border-radius:4px;padding:16px 18px;background:var(--surface)}
+.mission .kicker{margin-bottom:6px}
+.mission strong{font-family:var(--f-display);font-size:1.3rem;font-weight:800;line-height:1.2;display:block}
+.theme{float:right}
+
+/* Tarjetas */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.model{margin-block:6px 22px}
+.ode{font-family:var(--f-mono);font-size:1.05rem;background:var(--surface2);border-radius:6px;padding:12px 14px;margin-block:10px;overflow-x:auto;white-space:nowrap}
+.ode b{color:var(--sol)}
+table{border-collapse:collapse;width:100%}
+th,td{padding:6px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+thead th{font-size:.72rem;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--surface);z-index:1}
+td.t{text-align:left;white-space:normal}
+.vars td,.vars th{text-align:left;white-space:normal;font-size:.88rem}
+ul.plain{margin:8px 0 0;padding-left:18px;display:grid;gap:4px;font-size:.92rem}
+
+/* Layout principal */
+.layout{display:grid;grid-template-columns:minmax(0,330px) minmax(0,1fr);gap:20px;align-items:start}
+.controls{position:sticky;top:12px;max-height:calc(100vh - 24px);overflow:auto}
+.controls h2{margin-bottom:4px}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}
+.chip{font:inherit;font-size:.8rem;padding:5px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface2);color:var(--fg);cursor:pointer}
+.chip:hover{border-color:var(--fg)}
+fieldset{border:0;padding:0;margin:14px 0 0}
+legend{font-family:var(--f-mono);font-size:.7rem;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:0;margin-bottom:6px}
+.field{display:grid;gap:3px;margin-bottom:10px}
+.field label{font-size:.84rem;font-weight:500}
+.inp{display:flex;align-items:stretch}
+.inp input{flex:1;min-width:0;font:inherit;font-family:var(--f-mono);font-size:.95rem;padding:7px 9px;border:1px solid var(--line);border-right:0;border-radius:6px 0 0 6px;background:var(--bg);color:var(--fg)}
+.inp .unit{font-family:var(--f-mono);font-size:.78rem;display:flex;align-items:center;padding:0 9px;border:1px solid var(--line);border-radius:0 6px 6px 0;background:var(--surface2);color:var(--muted);min-width:64px;justify-content:center}
+.field.bad input,.field.bad .unit{border-color:var(--bad)}
+.err{color:var(--bad);font-size:.78rem;min-height:0}
+.err:empty{display:none}
+
+.results{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;min-width:0;transition:opacity .2s}
+.results.stale{opacity:.45}
+.banner{display:none;background:var(--bad-bg);color:var(--bad);border:1px solid var(--bad);border-radius:8px;padding:10px 14px;font-weight:500}
+.banner.on{display:block}
+.verdict{display:grid;grid-template-columns:auto minmax(0,1fr);gap:14px;align-items:center;border-radius:10px;padding:16px 18px;border:1.5px solid}
+.verdict.good{background:var(--good-bg);border-color:var(--good)}
+.verdict.bad{background:var(--bad-bg);border-color:var(--bad)}
+.pill{font-family:var(--f-mono);font-size:.75rem;letter-spacing:.06em;text-transform:uppercase;padding:5px 10px;border-radius:999px;font-weight:500;color:var(--surface)}
+.good .pill{background:var(--good)} .bad .pill{background:var(--bad)}
+.verdict p{font-size:1.02rem}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden}
+.stat{padding:14px 16px;border-right:1px solid var(--line)}
+.stat:last-child{border-right:0}
+.stat .k{font-size:.74rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.stat .v{font-family:var(--f-display);font-weight:800;font-size:1.7rem;line-height:1.15;margin-block:3px}
+.stat .s{font-size:.78rem;color:var(--muted)}
+
+.scene{display:grid;grid-template-columns:200px minmax(0,1fr);gap:20px}
+.tankbox{display:grid;justify-items:center;gap:8px}
+.collectors{display:flex;flex-wrap:wrap;gap:3px;justify-content:center;max-width:200px}
+.collectors i{display:block;width:14px;height:9px;background:var(--b2);border:1px solid var(--sol);transform:skewX(-18deg)}
+.readout{display:grid;gap:12px;align-content:start;min-width:0}
+.scrub{display:flex;gap:10px;align-items:center}
+.scrub input[type=range]{flex:1;min-width:0;accent-color:var(--sol)}
+.btn{font:inherit;font-size:.85rem;font-weight:600;padding:7px 14px;border-radius:6px;border:1.5px solid var(--fg);background:var(--fg);color:var(--bg);cursor:pointer}
+.btn.ghost{background:transparent;color:var(--fg);border-color:var(--line)}
+.trio{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.trio div{border-left:4px solid var(--c);padding:2px 0 2px 10px}
+.trio .k{font-size:.74rem;color:var(--muted)}
+.trio .v{font-family:var(--f-mono);font-size:1.35rem;font-weight:500;font-variant-numeric:tabular-nums}
+.trio .s{font-family:var(--f-mono);font-size:.74rem;color:var(--muted)}
+.bigclock{font-family:var(--f-display);font-weight:800;font-size:2.3rem;line-height:1}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.seg button{font:inherit;font-size:.82rem;font-family:var(--f-mono);padding:5px 12px;border:0;background:var(--surface);color:var(--fg);cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--fg);color:var(--bg)}
+.head{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.82rem;color:var(--muted);margin-bottom:6px}
+.legend i{display:inline-block;width:22px;height:0;border-top:3px solid var(--c);vertical-align:middle;margin-right:6px}
+.legend i.dash{border-top-style:dashed}
+svg.ch{width:100%;height:auto;display:block}
+svg.ch text{font-family:var(--f-mono);font-size:11px;fill:var(--muted)}
+svg.ch .grid{stroke:var(--line);stroke-width:1}
+svg.ch .axis{stroke:var(--muted);stroke-width:1}
+svg.ch .ref{stroke:var(--sol);stroke-width:1.5;stroke-dasharray:5 4}
+svg.ch text.reft{fill:var(--sol);font-weight:500}
+svg.ch .cur{stroke:var(--fg);stroke-width:1;opacity:.55}
+.s-exact{stroke:var(--exact);stroke-width:3;fill:none}
+.s-heun{stroke:var(--heun);stroke-width:2;fill:none;stroke-dasharray:6 4}
+.s-rk4{stroke:var(--rk4);stroke-width:2;fill:none}
+.m-heun{fill:var(--surface);stroke:var(--heun);stroke-width:2}
+.m-rk4{fill:var(--rk4)}
+.twrap{overflow:auto;max-height:380px;border:1px solid var(--line);border-radius:8px}
+.twrap table{font-family:var(--f-mono);font-size:.82rem;font-variant-numeric:tabular-nums}
+.small{font-size:.84rem;color:var(--muted)}
+.best{background:var(--good-bg)}
+.interp{display:grid;gap:10px;max-width:78ch}
+.interp p b{font-weight:600}
+.check{font-family:var(--f-mono);font-size:.85rem;display:grid;gap:4px;background:var(--surface2);padding:12px 14px;border-radius:6px;overflow-x:auto;white-space:nowrap}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:8px;font-size:.88rem;opacity:0;pointer-events:none;transition:opacity .2s;z-index:20}
+.toast.on{opacity:1}
+footer{margin-top:26px;padding-top:14px;border-top:1px solid var(--line);font-size:.84rem;color:var(--muted);display:grid;gap:4px}
+
+@media (max-width:980px){
+  .layout{grid-template-columns:minmax(0,1fr)}
+  .controls{position:static;max-height:none}
+  .hero{grid-template-columns:minmax(0,1fr)}
+  .grid2{grid-template-columns:minmax(0,1fr)}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .stat:nth-child(2){border-right:0}
+  .stat:nth-child(-n+2){border-bottom:1px solid var(--line)}
+}
+@media (max-width:620px){
+  .scene{grid-template-columns:minmax(0,1fr)}
+  .trio{grid-template-columns:minmax(0,1fr)}
+  .verdict{grid-template-columns:minmax(0,1fr)}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<!--/head-->
+<div class="wrap">
+  <div class="aguayo" aria-hidden="true"></div>
+  <header class="hero">
+    <div>
+      <div class="kicker">Desafío de EDO de primer orden · Heun · RK4 · solución analítica</div>
+      <h1>Inti <span>Q'uñi</span></h1>
+      <p class="lead">Un termotanque solar comunitario para un internado rural del altiplano. La ecuación diferencial dice cuántos colectores hacen falta para tener agua tibia sin quemar garrafas de gas.</p>
+    </div>
+    <div class="mission">
+      <div class="kicker">La pregunta del desafío</div>
+      <strong>¿Cuántos colectores necesita el internado para que el agua llegue a la temperatura objetivo antes de la hora límite?</strong>
+      <p class="small" style="margin-top:8px">Caso hipotético. Los parámetros son supuestos declarados, no mediciones. Inti = sol, q'uñi = tibio (quechua).</p>
+    </div>
+  </header>
+
+  <section class="model grid2" aria-label="Problema y modelo">
+    <div class="card">
+      <h2>El problema</h2>
+      <p style="margin-top:8px">Cada mañana el agua del tanque amanece fría y las y los estudiantes necesitan agua tibia para higiene y duchas. Calentarla con GLP cuesta dinero y la garrafa no siempre llega. Un tanque con colectores solares gana calor, pero también lo pierde hacia el aire frío de la altura.</p>
+      <p style="margin-top:8px"><b>Meta cuantificable:</b> que el agua alcance la temperatura objetivo (por defecto 40 °C) antes de la hora límite (por defecto 4 h después de las 08:00, es decir, a las 12:00).</p>
+      <ul class="plain">
+        <li>Beneficiarios: estudiantes y personal del internado (caso hipotético).</li>
+        <li>Supuestos: agua bien mezclada (una sola temperatura), ambiente y aporte solar constantes (promedios), pérdida proporcional a la diferencia con el aire (ley de Newton).</li>
+        <li>Intervalo: de 08:00 en adelante (t = 0 es las 08:00).</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h2>El modelo</h2>
+      <div class="ode"><b>dT/dt</b> = −k·(T − T<sub>a</sub>) + N·g &nbsp;&nbsp; <b>T(0)</b> = T<sub>0</sub></div>
+      <div style="overflow-x:auto"><table class="vars">
+        <tbody>
+        <tr><th>T(t)</th><td>Temperatura del agua (variable dependiente)</td><td class="mono">°C</td></tr>
+        <tr><th>t</th><td>Tiempo (variable independiente), 0 = 08:00</td><td class="mono">h</td></tr>
+        <tr><th>T<sub>a</sub></th><td>Temperatura ambiente promedio</td><td class="mono">°C</td></tr>
+        <tr><th>k</th><td>Coeficiente de pérdida de calor del tanque</td><td class="mono">1/h</td></tr>
+        <tr><th>g</th><td>Aporte de un colector (aumento de T por hora)</td><td class="mono">°C/h</td></tr>
+        <tr><th>N</th><td>Número de colectores</td><td class="mono">unid.</td></tr>
+        </tbody></table></div>
+      <p class="small" style="margin-top:8px">Solución exacta: <span class="mono">T(t) = T∞ + (T₀ − T∞)·e<sup>−kt</sup></span>, con <span class="mono">T∞ = T<sub>a</sub> + N·g/k</span> (temperatura de equilibrio).</p>
+    </div>
+  </section>
+
+  <main class="layout">
+    <aside class="card controls" aria-label="Parámetros">
+      <h2>Ajusta el sistema</h2>
+      <p class="small">Todo se recalcula al escribir. Los valores iniciales son hipotéticos.</p>
+      <div class="chips" id="chips"></div>
+      <form id="form" novalidate></form>
+    </aside>
+
+    <div class="results" id="results" aria-live="polite">
+      <div class="banner" id="banner">Corrige los campos marcados en rojo para actualizar los resultados.</div>
+      <div class="verdict" id="verdict"></div>
+      <div class="stats" id="stats"></div>
+
+      <section class="card">
+        <div class="head"><h2>El tanque, hora por hora</h2>
+          <div class="seg" id="viewSeg" role="group" aria-label="Paso mostrado"></div></div>
+        <div class="scene">
+          <div class="tankbox">
+            <svg id="tank" viewBox="0 0 200 250" width="200" height="250" role="img" aria-label="Tanque de agua con termómetro"></svg>
+            <div class="collectors" id="collectors" aria-hidden="true"></div>
+            <div class="small" id="collLab"></div>
+          </div>
+          <div class="readout">
+            <div><div class="small">Hora simulada</div><div class="bigclock mono" id="clock"></div><div class="small" id="tlab"></div></div>
+            <div class="trio" id="trio"></div>
+            <div class="scrub"><button class="btn" id="play" type="button">▶ Reproducir</button>
+              <input type="range" id="scrub" min="0" max="8" step="1" value="0" aria-label="Instante de la simulación"></div>
+            <p class="small">El control avanza un paso h por vez, igual que los métodos numéricos.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="head"><h2>Temperatura: exacta, Heun y RK4</h2></div>
+        <div class="legend"><span><i style="--c:var(--exact)"></i>Analítica</span><span><i class="dash" style="--c:var(--heun)"></i>Heun</span><span><i style="--c:var(--rk4)"></i>RK4</span></div>
+        <div id="chT"></div>
+        <p class="small">Con pasos finos las tres curvas se superponen. La siguiente gráfica amplifica la diferencia.</p>
+      </section>
+
+      <section class="card">
+        <div class="head"><h2>Errores frente a la solución analítica</h2></div>
+        <div class="legend"><span><i class="dash" style="--c:var(--heun)"></i>|error| Heun</span><span><i style="--c:var(--rk4)"></i>|error| RK4</span><span class="small">escala logarítmica</span></div>
+        <div id="chE"></div>
+        <h3 style="margin-block:16px 8px">Dos tamaños de paso, costo y precisión</h3>
+        <div style="overflow-x:auto"><table class="mono" id="cmp" style="font-size:.82rem"></table></div>
+        <p class="small" id="cmpNote" style="margin-top:8px"></p>
+      </section>
+
+      <section class="card">
+        <div class="head"><h2>Tabla por pasos</h2>
+          <button class="btn ghost" id="copy" type="button">Copiar tabla</button></div>
+        <div class="twrap"><table id="steps"></table></div>
+        <p class="small" style="margin-top:8px">Error relativo % = |exacta − numérica| / |exacta| × 100.</p>
+      </section>
+
+      <section class="card">
+        <div class="head"><h2>¿Cuánto mejora al achicar h?</h2></div>
+        <p class="small" style="margin-bottom:8px">Se parte del paso 1 y se divide a la mitad cuatro veces. El orden observado p = log₂(e(h)/e(h/2)) debe acercarse a 2 para Heun y a 4 para RK4.</p>
+        <div style="overflow-x:auto"><table class="mono" id="conv" style="font-size:.82rem"></table></div>
+      </section>
+
+      <section class="card">
+        <h2 style="margin-bottom:10px">Qué significa para la comunidad</h2>
+        <div class="interp" id="interp"></div>
+      </section>
+
+      <section class="card">
+        <h2 style="margin-bottom:10px">Comprobación de la solución analítica</h2>
+        <p class="small" style="margin-bottom:8px">Se sustituye T(t) en la EDO. Al derivar, el término constante desaparece y queda −k(T₀ − T∞)e<sup>−kt</sup>; el lado derecho da lo mismo porque T − T<sub>a</sub> = N·g/k + (T₀ − T∞)e<sup>−kt</sup>.</p>
+        <div class="check" id="check"></div>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    <div>Estudiante: [Nombre completo] · Materia: [Materia] · Desafío: Inti Q'uñi, termotanque solar comunitario</div>
+    <div>Los resultados son simulaciones con parámetros hipotéticos. No son predicciones comprobadas con datos reales. Aviso físico: a unos 3.600 m el agua hierve cerca de 88 °C, por eso el modelo se limita a metas de hasta 85 °C.</div>
+  </footer>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+'use strict';
+const $=id=>document.getElementById(id);
+const DEF={T0:6,Ta:10,k:0.2,g:2,N:6,V:300,Tm:40,tm:4,tmax:8,h:1,h2:0.5};
+const SPEC=[
+ {grp:'Condición inicial y entorno',items:[
+  {id:'T0',lab:'Agua al amanecer, T(0)',unit:'°C',min:0,max:60,step:0.5},
+  {id:'Ta',lab:'Temperatura ambiente promedio, Tₐ',unit:'°C',min:-10,max:40,step:0.5}]},
+ {grp:'Sistema solar (hipotético)',items:[
+  {id:'N',lab:'Colectores solares, N',unit:'unid.',min:0,max:40,step:1,int:true},
+  {id:'g',lab:'Aporte de cada colector, g',unit:'°C/h',min:0,max:10,step:0.1},
+  {id:'k',lab:'Pérdida de calor, k',unit:'1/h',min:0.01,max:2,step:0.01},
+  {id:'V',lab:'Volumen del tanque',unit:'L',min:10,max:5000,step:10}]},
+ {grp:'Meta de la comunidad',items:[
+  {id:'Tm',lab:'Temperatura objetivo',unit:'°C',min:10,max:85,step:1},
+  {id:'tm',lab:'Hora límite (horas desde las 08:00)',unit:'h',min:0.5,max:24,step:0.25}]},
+ {grp:'Simulación numérica',items:[
+  {id:'tmax',lab:'Tiempo simulado',unit:'h',min:1,max:24,step:1},
+  {id:'h',lab:'Tamaño de paso 1, h₁',unit:'h',min:0.01,max:24,step:0.25},
+  {id:'h2',lab:'Tamaño de paso 2, h₂',unit:'h',min:0.01,max:24,step:0.25}]}];
+const PRESETS=[
+ ['Caso base',{}],
+ ['Solo 4 colectores',{N:4}],
+ ['Madrugada helada',{T0:2,Ta:-3}],
+ ['Paso grueso',{h:4,h2:2}]];
+
+/* ---------- Matemática ---------- */
+const Tinf=p=>p.Ta+p.N*p.g/p.k;
+const ex=(t,p)=>{const ti=Tinf(p);return ti+(p.T0-ti)*Math.exp(-p.k*t);};
+const F=(T,p)=>-p.k*(T-p.Ta)+p.N*p.g;
+function grid(tmax,h){const n=Math.ceil(tmax/h-1e-9),t=[];for(let j=0;j<=n;j++)t.push(Math.min(j*h,tmax));return t;}
+function run(p,ts){
+  let H=p.T0,R=p.T0;const hs=[H],rs=[R];
+  for(let j=0;j<ts.length-1;j++){
+    const h=ts[j+1]-ts[j];
+    const a=F(H,p),b=F(H+h*a,p);H+=h/2*(a+b);
+    const k1=F(R,p),k2=F(R+h/2*k1,p),k3=F(R+h/2*k2,p),k4=F(R+h*k3,p);
+    R+=h/6*(k1+2*k2+2*k3+k4);
+    hs.push(H);rs.push(R);
+  }
+  return {hs,rs};
+}
+function sim(p,ts){
+  const {hs,rs}=run(p,ts);
+  const rows=ts.map((t,j)=>{const e=ex(t,p),aH=Math.abs(e-hs[j]),aR=Math.abs(e-rs[j]);
+    return {t,e,H:hs[j],R:rs[j],aH,aR,rH:e!==0?aH/Math.abs(e)*100:null,rR:e!==0?aR/Math.abs(e)*100:null};});
+  const last=rows[rows.length-1];
+  const mx=k=>Math.max(...rows.map(r=>r[k]));
+  const mr=k=>Math.max(...rows.map(r=>r[k]===null?0:r[k]));
+  return {ts,rows,n:ts.length-1,h:ts.length>1?ts[1]-ts[0]:0,maxH:mx('aH'),maxR:mx('aR'),finH:last.aH,finR:last.aR,
+    finrH:last.rH,finrR:last.rR,maxrH:mr('rH'),maxrR:mr('rR')};
+}
+function analysis(p){
+  const ti=Tinf(p);
+  let tstar=null;
+  if(p.T0>=p.Tm)tstar=0;else if(ti>p.Tm)tstar=Math.log((ti-p.T0)/(ti-p.Tm))/p.k;
+  const d=1-Math.exp(-p.k*p.tm);
+  const gmin=p.k*((p.Tm-p.Ta)-(p.T0-p.Ta)*Math.exp(-p.k*p.tm))/d;
+  const Nmin=p.g>0?Math.max(0,Math.ceil(gmin/p.g-1e-9)):null;
+  const E=p.V*4.186*Math.max(0,p.Tm-p.T0)/1000;
+  return {ti,tstar,gmin,Nmin,E,kWh:E/3.6,garr:30*E/(10*46.1*0.7)};
+}
+
+/* ---------- Formato ---------- */
+const clock=t=>{const m=Math.round(480+t*60),hh=Math.floor(m/60)%24,mm=m%60;return String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0');};
+const f2=x=>x.toFixed(2),f3=x=>x.toFixed(3),f4=x=>x.toFixed(4);
+const fe=x=>x===0?'0':x.toExponential(2);
+const fr=x=>x===null?'—':(x===0?'0':(x<0.001?x.toExponential(2):x.toFixed(4)));
+const num=x=>(Math.round(x*10000)/10000).toString();
+const SUP={'-':'⁻','0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
+const pow10=e=>'10'+String(e).split('').map(c=>SUP[c]).join('');
+const hue=T=>Math.round(215-Math.min(Math.max(T/80,0),1)*215);
+
+/* ---------- Gráficas SVG ---------- */
+function chart(o){
+  const W=680,H=o.H||300,m={l:58,r:16,t:16,b:40},iw=W-m.l-m.r,ih=H-m.t-m.b;
+  const X=v=>m.l+(v-o.xd[0])/(o.xd[1]-o.xd[0])*iw, Y=v=>m.t+ih-(v-o.yd[0])/(o.yd[1]-o.yd[0])*ih;
+  let s=`<svg class="ch" viewBox="0 0 ${W} ${H}" role="img" aria-label="${o.label}">`;
+  o.yt.forEach(v=>{s+=`<line class="grid" x1="${m.l}" x2="${W-m.r}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${m.l-8}" y="${Y(v)+4}" text-anchor="end">${o.yf(v)}</text>`;});
+  o.xt.forEach(v=>{s+=`<line class="grid" x1="${X(v)}" x2="${X(v)}" y1="${m.t}" y2="${m.t+ih}"/><text x="${X(v)}" y="${H-m.b+16}" text-anchor="middle">${v}</text>`;});
+  s+=`<line class="axis" x1="${m.l}" x2="${W-m.r}" y1="${m.t+ih}" y2="${m.t+ih}"/><line class="axis" x1="${m.l}" x2="${m.l}" y1="${m.t}" y2="${m.t+ih}"/>`;
+  s+=`<text x="${m.l+iw/2}" y="${H-4}" text-anchor="middle">${o.xlab}</text>`;
+  s+=`<text transform="translate(12 ${m.t+ih/2}) rotate(-90)" text-anchor="middle">${o.ylab}</text>`;
+  (o.hl||[]).forEach(l=>{if(l.v>=o.yd[0]&&l.v<=o.yd[1])s+=`<line class="ref" x1="${m.l}" x2="${W-m.r}" y1="${Y(l.v)}" y2="${Y(l.v)}"/><text class="reft" x="${m.l+6}" y="${Y(l.v)-5}">${l.t}</text>`;});
+  (o.vl||[]).forEach(l=>{if(l.v>=o.xd[0]&&l.v<=o.xd[1])s+=`<line class="ref" x1="${X(l.v)}" x2="${X(l.v)}" y1="${m.t}" y2="${m.t+ih}"/><text class="reft" x="${Math.min(X(l.v)+5,W-m.r-70)}" y="${m.t+12}">${l.t}</text>`;});
+  o.series.forEach(se=>{
+    const d=se.pts.map((q,i)=>(i?'L':'M')+X(q[0]).toFixed(1)+' '+Y(q[1]).toFixed(1)).join('');
+    s+=`<path class="${se.cls}" d="${d}"/>`;
+    if(se.mk&&se.pts.length<=40)se.pts.forEach(q=>{s+=se.mk==='c'?`<circle class="m-heun" cx="${X(q[0])}" cy="${Y(q[1])}" r="4"/>`:`<rect class="m-rk4" x="${X(q[0])-3}" y="${Y(q[1])-3}" width="6" height="6" transform="rotate(45 ${X(q[0])} ${Y(q[1])})"/>`;});
+  });
+  if(o.cur!==undefined)s+=`<line class="cur" x1="${X(o.cur)}" x2="${X(o.cur)}" y1="${m.t}" y2="${m.t+ih}"/>`;
+  return s+'</svg>';
+}
+function niceStep(t){return t<=8?1:t<=16?2:4;}
+
+/* ---------- Estado ---------- */
+let P=null,A=null,S=[null,null],view=0,idx=0,timer=null;
+function buildForm(){
+  const f=$('form');
+  f.addEventListener('submit',e=>e.preventDefault());
+  SPEC.forEach(g=>{
+    const fs=document.createElement('fieldset');
+    fs.innerHTML=`<legend>${g.grp}</legend>`;
+    g.items.forEach(it=>{
+      const d=document.createElement('div');d.className='field';d.id='f-'+it.id;
+      d.innerHTML=`<label for="in-${it.id}">${it.lab}</label><div class="inp"><input id="in-${it.id}" type="number" inputmode="decimal" step="${it.step}" min="${it.min}" max="${it.max}" value="${DEF[it.id]}"><span class="unit">${it.unit}</span></div><div class="err" id="er-${it.id}"></div>`;
+      fs.appendChild(d);
+    });
+    f.appendChild(fs);
+  });
+  f.addEventListener('input',()=>update());
+  const c=$('chips');
+  PRESETS.forEach(([lab,ov])=>{const b=document.createElement('button');b.type='button';b.className='chip';b.textContent=lab;
+    b.addEventListener('click',()=>{const v=Object.assign({},DEF,ov);Object.keys(v).forEach(k=>{$('in-'+k).value=v[k];});idx=0;stop();update();});c.appendChild(b);});
+}
+function validate(){
+  const p={},er={};
+  SPEC.forEach(g=>g.items.forEach(it=>{
+    const raw=$('in-'+it.id).value.trim(),v=raw===''?NaN:Number(raw);
+    if(!Number.isFinite(v)){er[it.id]='Escribe un número.';return;}
+    p[it.id]=v;
+    if(v<it.min||v>it.max)er[it.id]=`Debe estar entre ${it.min} y ${it.max} ${it.unit}.`;
+    else if(it.int&&!Number.isInteger(v))er[it.id]='Debe ser un número entero.';
+  }));
+  if(!er.tm&&!er.tmax&&p.tm>p.tmax)er.tm='La hora límite no puede superar el tiempo simulado.';
+  ['h','h2'].forEach(id=>{if(!er[id]&&!er.tmax){
+    if(p[id]>p.tmax)er[id]='El paso no puede ser mayor que el tiempo simulado.';
+    else if(p.tmax/p[id]>500)er[id]='Demasiados pasos (máximo 500). Aumenta el paso.';}});
+  if(!er.h&&!er.h2&&p.h===p.h2)er.h2='Elige un paso distinto de h₁ para poder comparar.';
+  return {p,er};
+}
+function update(){
+  const {p,er}=validate();
+  SPEC.forEach(g=>g.items.forEach(it=>{$('er-'+it.id).textContent=er[it.id]||'';$('f-'+it.id).classList.toggle('bad',!!er[it.id]);}));
+  const bad=Object.keys(er).length>0;
+  $('banner').classList.toggle('on',bad);$('results').classList.toggle('stale',bad);
+  if(bad)return;
+  stop();
+  const tcur=S[view]?S[view].ts[idx]:0;
+  P=p;A=analysis(p);
+  S=[sim(p,grid(p.tmax,p.h)),sim(p,grid(p.tmax,p.h2))];
+  const ts=S[view].ts;let b=0;ts.forEach((t,j)=>{if(Math.abs(t-tcur)<Math.abs(ts[b]-tcur))b=j;});idx=b;
+  render();
+}
+
+/* ---------- Render ---------- */
+function render(){
+  renderVerdict();renderSeg();renderScene();renderCharts();renderCmp();renderSteps();renderConv();renderInterp();renderCheck();
+}
+function renderVerdict(){
+  const p=P,a=A,v=$('verdict'),ok=a.tstar!==null&&a.tstar<=p.tm+1e-9;
+  v.className='verdict '+(ok?'good':'bad');
+  let txt;
+  if(a.tstar===null)txt=`Con ${p.N} colectores el agua nunca llega a ${p.Tm} °C: se estabiliza en ${f2(a.ti)} °C. `;
+  else if(ok)txt=`Con ${p.N} colectores el agua llega a ${p.Tm} °C en ${f2(a.tstar)} h (${clock(a.tstar)}), antes de la hora límite (${clock(p.tm)}). `;
+  else txt=`Con ${p.N} colectores el agua llega a ${p.Tm} °C en ${f2(a.tstar)} h (${clock(a.tstar)}), después de la hora límite (${clock(p.tm)}). `;
+  if(a.Nmin===null)txt+='Con g = 0 los colectores no aportan calor.';
+  else txt+=`Se necesitan al menos ${a.Nmin} colectores para cumplir la meta.`;
+  v.innerHTML=`<span class="pill">${ok?'Meta lograda':'Meta no lograda'}</span><p>${txt}</p>`;
+  const hot=a.ti>85?`<div class="small" style="grid-column:1/-1">Atención: la temperatura de equilibrio supera 85 °C. A unos 3.600 m el agua hierve cerca de 88 °C, así que el modelo deja de valer sin una válvula de alivio.</div>`:'';
+  v.insertAdjacentHTML('beforeend',hot);
+  $('stats').innerHTML=
+   `<div class="stat"><div class="k">T de equilibrio</div><div class="v">${f2(a.ti)} °C</div><div class="s">Tₐ + N·g/k</div></div>`+
+   `<div class="stat"><div class="k">Tiempo a la meta</div><div class="v">${a.tstar===null?'nunca':f2(a.tstar)+' h'}</div><div class="s">${a.tstar===null?'T∞ ≤ meta':'llega a las '+clock(a.tstar)}</div></div>`+
+   `<div class="stat"><div class="k">Colectores mínimos</div><div class="v">${a.Nmin===null?'—':a.Nmin}</div><div class="s">${a.Nmin===null?'g = 0':'aporte total ≥ '+f2(Math.max(a.gmin,0))+' °C/h'}</div></div>`+
+   `<div class="stat"><div class="k">GLP evitado</div><div class="v">${f2(a.garr)}</div><div class="s">garrafas de 10 kg por mes (estimado)</div></div>`;
+}
+function renderSeg(){
+  const seg=$('viewSeg');seg.innerHTML='';
+  S.forEach((s,i)=>{const b=document.createElement('button');b.type='button';b.textContent=`h = ${num(s.h)} h`;b.setAttribute('aria-pressed',i===view);
+    b.addEventListener('click',()=>{const t=S[view].ts[idx];view=i;const ts=S[view].ts;let k=0;ts.forEach((x,j)=>{if(Math.abs(x-t)<Math.abs(ts[k]-t))k=j;});idx=k;stop();render();});seg.appendChild(b);});
+}
+function renderScene(){
+  const s=S[view];$('scrub').max=s.n;$('scrub').value=idx;
+  const r=s.rows[idx];
+  const T=r.e,col=`hsl(${hue(T)} 72% 52%)`;
+  const hgt=170,y0=40,fillH=hgt*Math.min(Math.max(T/90,0),1);
+  const metaY=y0+hgt-hgt*Math.min(P.Tm/90,1);
+  $('tank').innerHTML=
+   `<rect x="20" y="30" width="110" height="190" rx="14" fill="${col}" fill-opacity=".92" stroke="var(--fg)" stroke-width="3"/>`+
+   `<path d="M20 70 Q47 58 75 70 T130 70" fill="none" stroke="var(--surface)" stroke-width="2" stroke-opacity=".55"/>`+
+   `<text x="75" y="140" text-anchor="middle" style="font-family:var(--f-display);font-weight:800;font-size:30px;fill:#fff;paint-order:stroke;stroke:rgba(0,0,0,.35);stroke-width:3px">${T.toFixed(1)}°</text>`+
+   `<rect x="150" y="${y0}" width="16" height="${hgt}" rx="8" fill="var(--surface2)" stroke="var(--fg)" stroke-width="2"/>`+
+   `<rect x="153" y="${y0+hgt-fillH}" width="10" height="${fillH}" rx="5" fill="${col}"/>`+
+   `<line x1="144" x2="176" y1="${metaY}" y2="${metaY}" stroke="var(--sol)" stroke-width="2.5"/>`+
+   `<text x="181" y="${metaY+4}" style="font-family:var(--f-mono);font-size:11px;fill:var(--sol)">${P.Tm}°</text>`+
+   `<text x="158" y="${y0+hgt+16}" text-anchor="middle" style="font-family:var(--f-mono);font-size:10px;fill:var(--muted)">0–90 °C</text>`;
+  $('collectors').innerHTML=Array.from({length:Math.min(P.N,40)},()=>'<i></i>').join('');
+  $('collLab').textContent=`${P.N} colector${P.N===1?'':'es'} solar${P.N===1?'':'es'}`;
+  $('clock').textContent=clock(r.t);
+  $('tlab').textContent=`t = ${num(r.t)} h · paso ${idx} de ${s.n}`;
+  $('trio').innerHTML=
+   `<div style="--c:var(--exact)"><div class="k">Analítica</div><div class="v">${f3(r.e)}</div><div class="s">°C</div></div>`+
+   `<div style="--c:var(--heun)"><div class="k">Heun</div><div class="v">${f3(r.H)}</div><div class="s">error ${fe(r.aH)} °C</div></div>`+
+   `<div style="--c:var(--rk4)"><div class="k">RK4</div><div class="v">${f3(r.R)}</div><div class="s">error ${fe(r.aR)} °C</div></div>`;
+}
+function renderCharts(){
+  const s=S[view],p=P;
+  const ex2=[];for(let i=0;i<=160;i++){const t=p.tmax*i/160;ex2.push([t,ex(t,p)]);}
+  const all=s.rows.flatMap(r=>[r.e,r.H,r.R]).concat(ex2.map(q=>q[1]),[p.Tm]);
+  const lo=Math.min(0,Math.floor(Math.min(...all)/10)*10),hi=Math.ceil(Math.max(...all)/10)*10;
+  const yt=[];const st=(hi-lo)>60?20:10;for(let v=lo;v<=hi;v+=st)yt.push(v);
+  const xs=niceStep(p.tmax),xt=[];for(let v=0;v<=p.tmax+1e-9;v+=xs)xt.push(v);
+  $('chT').innerHTML=chart({label:'Temperatura del agua en el tiempo',xd:[0,p.tmax],yd:[lo,hi],xt,yt,yf:v=>v,xlab:'Tiempo (h desde las 08:00)',ylab:'Temperatura (°C)',
+    hl:[{v:p.Tm,t:`meta ${p.Tm} °C`}],vl:[{v:p.tm,t:`límite ${clock(p.tm)}`}],cur:s.ts[idx],
+    series:[{cls:'s-exact',pts:ex2},{cls:'s-heun',pts:s.rows.map(r=>[r.t,r.H]),mk:'c'},{cls:'s-rk4',pts:s.rows.map(r=>[r.t,r.R]),mk:'d'}]});
+  const FLOOR=1e-16,lg=x=>Math.log10(Math.max(x,FLOOR));
+  const rr=s.rows.slice(1);
+  const vals=rr.flatMap(r=>[lg(r.aH),lg(r.aR)]);
+  let a=Math.floor(Math.min(...vals)),b=Math.ceil(Math.max(...vals));if(b-a<2)b=a+2;
+  const yt2=[];for(let v=a;v<=b;v++)yt2.push(v);
+  $('chE').innerHTML=chart({label:'Error absoluto de Heun y RK4 en escala logarítmica',H:280,xd:[0,p.tmax],yd:[a,b],xt,yt:yt2,yf:pow10,xlab:'Tiempo (h desde las 08:00)',ylab:'|error| (°C)',cur:s.ts[idx],
+    series:[{cls:'s-heun',pts:rr.map(r=>[r.t,lg(r.aH)]),mk:'c'},{cls:'s-rk4',pts:rr.map(r=>[r.t,lg(r.aR)]),mk:'d'}]});
+}
+function renderCmp(){
+  const rows=[];
+  S.forEach((s,i)=>{rows.push({s,m:'Heun',ev:2*s.n,fin:s.finH,mx:s.maxH,rf:s.finrH,rm:s.maxrH});rows.push({s,m:'RK4',ev:4*s.n,fin:s.finR,mx:s.maxR,rf:s.finrR,rm:s.maxrR});});
+  const best=Math.min(...rows.map(r=>r.mx));
+  $('cmp').innerHTML=`<thead><tr><th>Paso h (h)</th><th>Método</th><th>Eval. de f</th><th>|e| final (°C)</th><th>|e| máx (°C)</th><th>e rel. final (%)</th><th>e rel. máx (%)</th></tr></thead><tbody>`+
+   rows.map(r=>`<tr class="${r.mx===best?'best':''}"><td>${num(r.s.h)} (${r.s.n} pasos)</td><td>${r.m}</td><td>${r.ev}</td><td>${fe(r.fin)}</td><td>${fe(r.mx)}</td><td>${fr(r.rf)}</td><td>${fr(r.rm)}</td></tr>`).join('')+'</tbody>';
+  $('cmpNote').textContent='La fila resaltada es la de menor error máximo. RK4 evalúa f cuatro veces por paso y Heun dos.';
+}
+function renderSteps(){
+  const s=S[view];
+  $('steps').innerHTML=`<thead><tr><th>t (h)</th><th>Hora</th><th>Analítica</th><th>Heun</th><th>RK4</th><th>|e| Heun</th><th>|e| RK4</th><th>% Heun</th><th>% RK4</th></tr></thead><tbody>`+
+   s.rows.map(r=>`<tr><td>${num(r.t)}</td><td>${clock(r.t)}</td><td>${f4(r.e)}</td><td>${f4(r.H)}</td><td>${f4(r.R)}</td><td>${fe(r.aH)}</td><td>${fe(r.aR)}</td><td>${fr(r.rH)}</td><td>${fr(r.rR)}</td></tr>`).join('')+'</tbody>';
+}
+let CONV=[];
+function renderConv(){
+  const n0=S[0].n;CONV=[];let prev=null;
+  for(let i=0;i<5;i++){const n=n0*Math.pow(2,i),ts=[];for(let j=0;j<=n;j++)ts.push(P.tmax*j/n);const s=sim(P,ts);
+    const pH=prev&&s.maxH>0?Math.log2(prev.maxH/s.maxH):null,pR=prev&&s.maxR>0?Math.log2(prev.maxR/s.maxR):null;
+    CONV.push({h:P.tmax/n,n,maxH:s.maxH,maxR:s.maxR,pH,pR,evH:2*n,evR:4*n});prev=s;}
+  $('conv').innerHTML=`<thead><tr><th>Paso h (h)</th><th>|e| máx Heun</th><th>orden p</th><th>|e| máx RK4</th><th>orden p</th></tr></thead><tbody>`+
+   CONV.map(c=>`<tr><td>${num(c.h)}</td><td>${fe(c.maxH)}</td><td>${c.pH===null?'—':c.pH.toFixed(2)}</td><td>${fe(c.maxR)}</td><td>${c.pR===null?'—':c.pR.toFixed(2)}</td></tr>`).join('')+'</tbody>';
+}
+function renderInterp(){
+  const p=P,a=A,s0=S[0],s1=S[1],out=[];
+  const ok=a.tstar!==null&&a.tstar<=p.tm+1e-9;
+  out.push(`<p><b>Respuesta a la pregunta.</b> ${ok?`Con ${p.N} colectores el internado tiene agua a ${p.Tm} °C a las ${clock(a.tstar)}, antes de las ${clock(p.tm)}.`:`Con ${p.N} colectores el agua no está lista a tiempo.`} ${a.Nmin===null?'':`El mínimo que cumple la meta es de ${a.Nmin} colectores${a.Nmin>p.N?', es decir, faltan '+(a.Nmin-p.N):''}.`} Más colectores suben la temperatura de equilibrio (${f2(a.ti)} °C), pero la pérdida de calor hace que el agua se acerque a ese valor cada vez más despacio.</p>`);
+  const ahorro=a.garr;
+  out.push(`<p><b>Qué se ahorra.</b> Calentar ${p.V} L de ${p.T0} °C a ${p.Tm} °C requiere unos ${f2(a.E)} MJ (${f2(a.kWh)} kWh). Si cada día se hiciera con GLP al 70 % de eficiencia, serían unas ${f2(ahorro)} garrafas de 10 kg al mes que la comunidad no tendría que comprar ni transportar.</p>`);
+  const rat=s0.maxH/s0.maxR,rat1=s1.maxH/s1.maxR;
+  const lowMaxC=CONV[CONV.length-1];
+  let eff='';
+  const heunNeed=CONV.find(c=>c.maxH<=s0.maxR);
+  if(heunNeed)eff=` Para igualar el error de RK4 con h = ${num(s0.h)} h (${4*s0.n} evaluaciones), Heun necesitó h = ${num(heunNeed.h)} h (${heunNeed.evH} evaluaciones).`;
+  else eff=` Ni siquiera con h = ${num(lowMaxC.h)} h (${lowMaxC.evH} evaluaciones) Heun igualó el error de RK4 con h = ${num(s0.h)} h (${4*s0.n} evaluaciones).`;
+  out.push(`<p><b>Qué método fue mejor.</b> RK4 produjo menor error en los dos ensayos: con h = ${num(s0.h)} h su error máximo fue ${fe(s0.maxR)} °C contra ${fe(s0.maxH)} °C de Heun (${rat>=10?Math.round(rat):rat.toFixed(1)} veces menor), y con h = ${num(s1.h)} h fue ${fe(s1.maxR)} °C contra ${fe(s1.maxH)} °C (${rat1>=10?Math.round(rat1):rat1.toFixed(1)} veces menor).${eff}</p>`);
+  const c1=CONV[1];
+  out.push(`<p><b>Orden de los métodos.</b> Al dividir h a la mitad, el error de Heun bajó cerca de ${Math.pow(2,c1.pH||2).toFixed(1)} veces (orden ≈ ${c1.pH===null?'—':c1.pH.toFixed(2)}) y el de RK4 cerca de ${Math.pow(2,c1.pR||4).toFixed(1)} veces (orden ≈ ${c1.pR===null?'—':c1.pR.toFixed(2)}), tal como predice la teoría para métodos de orden 2 y 4.</p>`);
+  out.push(`<p><b>Limitaciones.</b> El modelo supone agua bien mezclada, aire y radiación constantes y un solo tanque. En la realidad el sol cambia durante el día y con las nubes, y la pérdida depende del viento. Los parámetros de esta página son hipotéticos: antes de comprar equipos habría que medir T₀, Tₐ, k y g en el lugar. Los resultados son una simulación y no una predicción comprobada.</p>`);
+  $('interp').innerHTML=out.join('');
+}
+function renderCheck(){
+  const p=P,t=p.tmax/2,ti=Tinf(p),lhs=(p.T0-ti)*(-p.k)*Math.exp(-p.k*t),rhs=F(ex(t,p),p);
+  $('check').innerHTML=
+   `<div>t de prueba = ${num(t)} h</div>`+
+   `<div>Lado izquierdo  dT/dt        = ${lhs.toPrecision(10)} °C/h</div>`+
+   `<div>Lado derecho   −k(T−Tₐ)+N·g = ${rhs.toPrecision(10)} °C/h</div>`+
+   `<div>Residuo |izq − der|          = ${Math.abs(lhs-rhs).toExponential(2)}</div>`+
+   `<div>Condición inicial: T(0) − T₀ = ${(ex(0,p)-p.T0).toExponential(2)}</div>`;
+}
+
+/* ---------- Reproducción y utilidades ---------- */
+function stop(){if(timer){clearInterval(timer);timer=null;}$('play').textContent='▶ Reproducir';}
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),1800);}
+function wire(){
+  $('scrub').addEventListener('input',e=>{idx=+e.target.value;renderScene();renderCharts();});
+  $('play').addEventListener('click',()=>{
+    if(timer){stop();return;}
+    const n=S[view].n;if(idx>=n)idx=0;
+    $('play').textContent='❚❚ Pausa';
+    timer=setInterval(()=>{if(idx>=n){stop();return;}idx++;renderScene();renderCharts();},Math.max(120,Math.min(600,4000/n)));
+  });
+  $('copy').addEventListener('click',()=>{
+    const s=S[view];const lines=['t_h\thora\tanalitica\tHeun\tRK4\terr_Heun\terr_RK4\tpct_Heun\tpct_RK4'].concat(s.rows.map(r=>[r.t,clock(r.t),r.e,r.H,r.R,r.aH,r.aR,r.rH===null?'':r.rH,r.rR===null?'':r.rR].join('\t')));
+    const txt=lines.join('\n');
+    const fb=()=>{const w=document.querySelector('.twrap');const rg=document.createRange();rg.selectNodeContents(w);const sel=getSelection();sel.removeAllRanges();sel.addRange(rg);toast('Tabla seleccionada: copia con Ctrl+C');};
+    try{navigator.clipboard.writeText(txt).then(()=>toast('Tabla copiada'),fb);}catch(e){fb();}
+  });
+}
+buildForm();wire();update();
+})();
+</script>
